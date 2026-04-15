@@ -28,6 +28,12 @@ const Dashboard = () => {
             JobEase
           </h2>
           <div className="flex items-center gap-6">
+            <button
+               onClick={() => navigate('/performance')}
+               className="text-vintage-dark/80 font-medium hover:text-vintage-navy transition-colors"
+            >
+               Performance Analysis
+            </button>
             <span className="text-vintage-dark/80 font-medium">Hello, {currentUser?.displayName || 'Candidate'}</span>
             <button
               onClick={handleLogout}

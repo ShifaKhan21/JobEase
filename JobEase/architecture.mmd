@@ -1,0 +1,28 @@
+graph TD
+    classDef frontend fill:#e1f5fe,stroke:#039be5,stroke-width:2px,color:#000;
+    classDef backend fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#000;
+    classDef external fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#000;
+    classDef model fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#000;
+
+    subgraph Frontend ["🟦 Frontend (React.js)"]
+        UI["💻 UI Components<br/>(HomePage, Dashboard, etc.)"]:::frontend
+        Speech["🎤 Web Speech API<br/>(STT/TTS)"]:::frontend
+        UI --> Speech
+    end
+
+    subgraph Backend ["🟩 Backend (Node.js/Express)"]
+        Router["🛣️ Express API Routes"]:::backend
+        Parser["📄 PDF Parser<br/>(Multer & pdf-parse)"]:::backend
+        AI["🧠 Flan-T5 AI Model<br/>(@xenova/transformers)"]:::model
+        Router --> Parser
+        Router --> AI
+    end
+
+    subgraph External ["🟧 External Services"]
+        FirebaseAuth["🔐 Firebase Auth"]:::external
+        Firestore["🗄️ Firebase Firestore<br/>(Reports)"]:::external
+    end
+
+    UI <-->|REST API| Router
+    UI <-->|Auth| FirebaseAuth
+    UI <-->|Save/Fetch Reports| Firestore

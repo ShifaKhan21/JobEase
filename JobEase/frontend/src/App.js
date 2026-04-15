@@ -6,6 +6,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
 import InterviewRoom from './components/InterviewRoom';
+import PerformanceReport from './components/PerformanceReport';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -36,6 +37,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <InterviewRoom />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/performance" 
+              element={
+                <ProtectedRoute>
+                  <PerformanceReport />
                 </ProtectedRoute>
               } 
             />

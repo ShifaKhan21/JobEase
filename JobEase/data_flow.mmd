@@ -1,0 +1,48 @@
+sequenceDiagram
+    autonumber
+    participant User as 👤 User
+    participant Client as 💻 React Client
+    participant Server as ⚙️ Node.js Backend
+    participant Firebase as ☁️ Firebase Services
+
+    User->>Client: Log in / Sign up
+    Client->>Firebase: Authenticate User
+    Firebase-->>Client: Auth Token & User Info
+    
+    User->>Client: Uploads Resume (📄 PDF)
+    Client->>Server: POST /api/process-resume
+    
+    rect rgb(232, 245, 233)
+    Note over Server: 📄 Parse PDF & Extract Skills
+    end
+    
+    Server-->>Client: Returns Extracted Skills & Text
+    
+    Client->>Server: POST /api/start-interview (Context)
+    
+    rect rgb(243, 229, 245)
+    Note over Server: 🧠 Generate Questions via Flan-T5
+    end
+    
+    Server-->>Client: Returns Question List
+    
+    loop 🎤 Interview Process
+        Server-->>Client: AI Question Context
+        Client->>User: 🔊 Text-to-Speech (Reads Question)
+        User->>Client: 🗣️ Speaks Answer (Mic)
+        Client->>Client: Web Speech API transcribes live
+        Client->>Server: POST /api/generate-question (w/ Answer)
+        
+        rect rgb(243, 229, 245)
+        Note over Server: 🧠 Generate contextual follow-up
+        end
+        
+        Server-->>Client: Returns Next Question
+    end
+    
+    rect rgb(255, 243, 224)
+    Note over Client,Firebase: 📊 Generate & Compile Performance Report
+    Client->>Firebase: Save Report to 🗄️ Firestore
+    end
+    
+    Client->>User: Display Interview Feedback & 📈 Metrics

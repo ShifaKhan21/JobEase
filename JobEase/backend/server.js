@@ -1,126 +1,136 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const pdf = require('pdf-parse');
-// Model inference (load-only): new fine-tuned FLAN-T5
-const MODEL_CONFIG = {
-  model_path: path.resolve(__dirname, '..', 'new-finetune-flant5-base-model'),
-  max_length: 256,
-  temperature: 0.8,
-  top_p: 0.92,
-  device: 'cpu'
-};
-const { pipeline } = require('@xenova/transformers');
-let text2textPipeline = null;
-async function initializeModel() {
-  if (!text2textPipeline) {
-    text2textPipeline = await pipeline(
-      'text2text-generation',
-      MODEL_CONFIG.model_path,
-      { device: MODEL_CONFIG.device, local_files_only: false }
-    );
+const { GoogleGenAI } = require('@google/genai');
+
+const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+
+async function callGemini(prompt) {
+  try {
+    const response = await genai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    throw error;
   }
-  return text2textPipeline;
 }
 
+function extractJSON(text) {
+  try {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end >= start) {
+      return JSON.parse(text.substring(start, end + 1));
+    }
+  } catch (e) {
+    console.error("JSON parsing error:", e);
+  }
+  return null;
+}
+
+
 async function generateFollowUpQuestion(previousQuestion, response) {
-  const generator = await initializeModel();
-  const prompt = `Task: Generate Follow-up Question\nPrevious Question: ${previousQuestion}\nResponse: ${response}\nGenerate a relevant follow-up question:`;
-  const outputs = await generator(prompt, {
-    max_new_tokens: MODEL_CONFIG.max_length,
-    temperature: MODEL_CONFIG.temperature,
-    top_p: MODEL_CONFIG.top_p,
-    do_sample: true
-  });
-  return (Array.isArray(outputs) && outputs[0]?.generated_text) ? outputs[0].generated_text : String(outputs);
+  const prompt = `Task: Generate Follow-up Question\nPrevious Question: ${previousQuestion}\nResponse: ${response}\nGenerate a highly relevant follow-up question based on the user's response:`;
+  try {
+    const text = await callGemini(prompt);
+    return text.trim();
+  } catch(e) {
+    return "Can you elaborate on your response further?";
+  }
 }
 
 async function generateQuestion(context) {
-  const generator = await initializeModel();
-
   // Truncate resume text to avoid token limits (approx 3000 chars)
   const resumeContext = context.resumeText ? context.resumeText.substring(0, 3000) : "No resume text provided.";
 
-  const prompt = `You are JobEase AI Interviewer.
+  let performanceContext = "";
+  if (context.previousPerformance) {
+     const score = Math.floor((context.previousPerformance.communication + context.previousPerformance.techAccuracy + context.previousPerformance.contentQuality)/3) || 80;
+     if (score > 85) {
+        performanceContext = `CRITICAL: The candidate performed exceptionally well in their last interview (Score: ${score}%). You MUST ask ADVANCED, deeper level scenario and architecture questions. Do NOT ask basic definitional questions.`;
+     } else if (score < 70) {
+        performanceContext = `CRITICAL: The candidate struggled in their last interview (Score: ${score}%). Ensure the questions are slightly foundational but relevant. Keep difficulty moderate to easy.`;
+     } else {
+        performanceContext = `The candidate had an average performance in their last interview (Score: ${score}%). Maintain a standard level of difficulty.`;
+     }
+  }
+
+  let typeSpecificInstructions = "";
+  if (context.interviewType === 'technical') {
+    if (context.isFollowUp) {
+      typeSpecificInstructions = `You MUST ask a strictly TECHNICAL FOLLOW-UP question that digs deeper into the candidate's last answer. ASSESS THEIR ANSWER STRENGTH: If their answer was strong/accurate, SIGNIFICANTLY INCREASE the difficulty level of the follow-up question. If it was weak, ask a foundational/easier follow-up. Do NOT change the topic abruptly. Ensure the question probes their technical understanding of ${context.domain} based on what they just stated.`;
+    } else {
+      typeSpecificInstructions = `You MUST ask a strictly TECHNICAL question based on the extracted skills (${context.domain}). Focus on coding concepts, architecture, debugging, or specific tools.`;
+    }
+  } else if (context.interviewType === 'behavioral') {
+    if (context.isFollowUp) {
+      typeSpecificInstructions = `You MUST ask a BEHAVIORAL/HR FOLLOW-UP question based on their last answer. ASSESS THEIR ANSWER STRENGTH: If their answer lacked detail, ask a more pressing follow-up. Ask for a specific example, or probe their conflict resolution, leadership, or teamwork regarding what they just described.`;
+    } else {
+      typeSpecificInstructions = "You MUST ask an HR/BEHAVIORAL question (e.g., leadership, past failures, teamwork). Do NOT ask technical implementation questions.";
+    }
+  } else {
+    if (context.isFollowUp) {
+      typeSpecificInstructions = `You MUST ask a FOLLOW-UP question based on the user's last answer, probing deeper. ASSESS THEIR ANSWER STRENGTH: Increase/decrease difficulty based on if they answered well. Depending on what they just said, evaluate their technical skills (${context.domain}) or their behavioral traits.`;
+    } else {
+      typeSpecificInstructions = `Since the interview type is Mixed, you MUST ask either a technical question about their skills (${context.domain}) OR a behavioral/HR question. Mix them up.`;
+    }
+  }
+
+  let lastAnswerSection = context.isFollowUp ? `\nLAST ANSWER GIVEN BY USER:\n${context.lastAnswer}` : "";
+
+  const prompt = `You are JobEase AI Interviewer conducting a ${context.interviewType} interview.
 
 CRITICAL BEHAVIOR (MUST FOLLOW):
 1. You are NOT a generic question generator.
-2. You MUST first analyze the RESUME text.
-3. Every question must be linked to:
-   - a project,
-   - experience,
-   - or a skill mentioned in resume.
-
+2. ${typeSpecificInstructions}
+3. If referring to past experience, make sure it is linked to a project, experience, or skill mentioned in the resume.
 4. STRICTLY FORBIDDEN:
    - Repeating any previous question.
-   - Asking generic questions not grounded in resume.
-   - Hallucinating technologies not in resume.
-
-5. If resume lacks info → reply:
-   "Not enough data in resume to ask specific question."
-
-6. Ask ONLY ONE question at a time.
-7. Difficulty adaptation rule:
-   - weak answer → easier conceptual
-   - strong answer → deeper scenario/design
-
+   - Hallucinating technologies not in resume or skills.
+5. Ask ONLY ONE question at a time.
+6. ${performanceContext}
 
 RESUME:
 ${resumeContext}
 
-ALREADY ASKED:
-${(context.previousQuestions || []).join('\n')}
+SKILLS / DOMAIN:
+${context.domain}
 
-LAST ANSWER:
-${context.lastAnswer || 'N/A'}
+ALREADY ASKED:
+${(context.previousQuestions || []).join('\n')}${lastAnswerSection}
 
 INSTRUCTIONS:
-1. Analyze resume entities (projects, tech, roles).
-2. Choose ONE entity.
-3. Generate 1 interview question strictly from that entity.
-4. Avoid ALREADY ASKED list.
-
-OUTPUT ONLY JSON:
+Generate exactly ONE interview question. Return ONLY a valid JSON object. Do not include markdown blocks.
 
 {
- "question": "",
- "from": "project/exp/skill name",
- "intent": "concept/design/debug",
- "difficulty": "easy/medium/hard"
+  "question": "Your interview question goes here",
+  "from": "project/exp/skill name or behavioral trait",
+  "intent": "concept/design/debug/behavioral/HR",
+  "difficulty": "easy/medium/hard"
 }`;
 
   try {
-    const outputs = await generator(prompt, {
-      max_new_tokens: MODEL_CONFIG.max_length,
-      temperature: MODEL_CONFIG.temperature,
-      top_p: MODEL_CONFIG.top_p,
-      do_sample: true
-    });
-
-    let rawOutput = (Array.isArray(outputs) && outputs[0]?.generated_text) ? outputs[0].generated_text : String(outputs);
-
-    // Try to parse JSON output
-    try {
-      // Find the first '{' and last '}' to extract JSON
-      const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return parsed.question;
-      }
-    } catch (e) {
-      console.warn("Model didn't output valid JSON, using raw output", e);
+    const rawOutput = await callGemini(prompt);
+    const parsed = extractJSON(rawOutput);
+    if (parsed && parsed.question) {
+      return parsed.question;
     }
-
-    return rawOutput;
+    return rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
   } catch (error) {
     console.error("Error in generateQuestion:", error);
     return "Could you describe your technical background?";
   }
 }
 
-async function generateQuestions(resumeText, skills, interviewType, count = 10, previousQuestions = []) {
+async function generateQuestions(resumeText, skills, interviewType, count = 10, previousQuestions = [], previousPerformance = null) {
   try {
     const questions = [];
     for (let i = 0; i < count; i++) {
@@ -129,7 +139,8 @@ async function generateQuestions(resumeText, skills, interviewType, count = 10, 
         interviewType,
         domain: skills.slice(0, 5).join(', '),
         experienceLevel: 'mid-level',
-        difficulty: 'medium'
+        difficulty: 'medium',
+        previousPerformance
       };
       const q = await generateQuestion({ ...context, previousQuestions: [...previousQuestions, ...questions] });
       questions.push(String(q).trim());
@@ -148,7 +159,6 @@ async function generateQuestions(resumeText, skills, interviewType, count = 10, 
     return filtered.slice(0, Math.max(1, Math.min(count, filtered.length)));
   }
 }
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -206,34 +216,43 @@ app.post('/api/process-resume', upload.single('resume'), async (req, res) => {
     // Extract skills and text from resume
     const { text: resumeText, skills } = await extractSkillsFromResume(resumePath);
 
-    let questions = [];
-    try {
-      // Try model-backed generation with new prompt
-      // Note: Generating 10 questions with the large prompt might be slow/expensive
-      // We'll generate 5 high quality ones instead
-      questions = await generateQuestions(resumeText, skills, interviewType, 5, []);
-    } catch (e) {
-      console.error('Model generation failed, falling back:', e);
-      // Final guard fallback to list
-      const pool = FALLBACK_QUESTIONS[interviewType] || FALLBACK_QUESTIONS.technical;
-      questions = pool.slice(0, 3);
-    }
-
     // Clean up uploaded file (ignore errors)
     try { fs.unlinkSync(resumePath); } catch { }
 
-    res.json({ success: true, skills, questions, interviewType });
+    res.json({ success: true, skills, resumeText, interviewType });
   } catch (error) {
     console.error('Error processing resume:', error);
     // Last-resort response with safe defaults
     res.status(200).json({
       success: true,
       skills: ['JavaScript', 'React', 'Node.js', 'Python', 'SQL'],
+      resumeText: "Fallback text",
+      interviewType: req?.body?.type || 'technical'
+    });
+  }
+});
+
+// Endpoint to start interview (generates initial questions using modified skills)
+app.post('/api/start-interview', async (req, res) => {
+  try {
+    const { resumeText, skills, interviewType, previousPerformance } = req.body;
+    let questions = [];
+    try {
+      questions = await generateQuestions(resumeText, skills, interviewType, 5, [], previousPerformance);
+    } catch (e) {
+       console.error('Model generation failed, falling back:', e);
+       const pool = FALLBACK_QUESTIONS[interviewType] || FALLBACK_QUESTIONS.technical;
+       questions = pool.slice(0, 3);
+    }
+    res.json({ success: true, questions });
+  } catch (error) {
+    console.error('Error generating initial questions:', error);
+    res.status(200).json({
+      success: true,
       questions: [
         'Explain the difference between let, const, and var in JavaScript.',
         'How would you optimize a React component that re-renders frequently?'
-      ],
-      interviewType: req?.body?.type || 'technical'
+      ]
     });
   }
 });
@@ -241,11 +260,11 @@ app.post('/api/process-resume', upload.single('resume'), async (req, res) => {
 // Generate next question endpoint
 app.post('/api/generate-question', async (req, res) => {
   try {
-    const { skills, interviewType, previousQuestions = [], userResponse } = req.body;
+    const { skills, interviewType, previousQuestions = [], userResponse, previousPerformance } = req.body;
 
     let nextQuestion;
     try {
-      nextQuestion = await generateNextQuestion(skills, interviewType, previousQuestions, userResponse);
+      nextQuestion = await generateNextQuestion(skills, interviewType, previousQuestions, userResponse, previousPerformance);
     } catch (e) {
       nextQuestion = 'What are your thoughts on this approach?';
     }
@@ -259,22 +278,75 @@ app.post('/api/generate-question', async (req, res) => {
   }
 });
 
-// Process audio response endpoint
+// Process text response endpoint (formerly audio)
 app.post('/api/process-audio', async (req, res) => {
   try {
-    const { audioData, question, interviewType } = req.body;
+    const { userText, question, interviewType } = req.body;
 
-    // Here you would process the audio and generate feedback
-    // For now, we'll simulate the response
-    const feedback = await processAudioResponse(audioData, question, interviewType);
+    const feedback = await processTextResponse(userText, question, interviewType);
 
     res.json({
       success: true,
       feedback: feedback
     });
   } catch (error) {
-    console.error('Error processing audio:', error);
-    res.status(500).json({ error: 'Failed to process audio' });
+    console.error('Error processing response:', error);
+    res.status(500).json({ error: 'Failed to process response' });
+  }
+});
+
+// Endpoint to generate actual performance feedback using Gemini 2.0
+app.post('/api/generate-report', async (req, res) => {
+  try {
+    const { interviewHistory, type } = req.body;
+    
+    // Check if enough data to evaluate
+    if (!interviewHistory || interviewHistory.length < 2) {
+      return res.status(400).json({ error: 'Not enough interview data to generate report' });
+    }
+
+    const conversationContext = interviewHistory.map(h => `${h.type.toUpperCase()}: ${h.content}`).join('\n');
+
+    const prompt = `You are JobEase Performance Evaluator. Evaluate the candidate's interview performance based on the conversation log below.
+    The interview type was: ${type || 'Technical'}.
+
+    Log:
+    ${conversationContext}
+
+    Instruction:
+    Generate a detailed performance report. Return ONLY a valid JSON object matching exactly this structure:
+    {
+      "communication": (number 0-100),
+      "techAccuracy": (number 0-100),
+      "contentQuality": (number 0-100),
+      "strengths": ["List of 3 strengths"],
+      "improvements": ["List of 3 exact areas to improve, be highly specific to topics they missed"],
+      "analysis": "A detailed 2-3 sentence overall analysis of their performance."
+    }`;
+
+    const rawOutput = await callGemini(prompt);
+    
+    const parsedData = extractJSON(rawOutput);
+    if (parsedData) {
+      return res.json({ success: true, report: parsedData });
+    } else {
+      throw new Error("Invalid output format from model");
+    }
+
+  } catch(error) {
+    console.error("Error generating report:", error);
+    // Fallback object
+    res.json({
+      success: true, 
+      report: {
+        communication: 75,
+        techAccuracy: 70,
+        contentQuality: 80,
+        strengths: ["Clear phrasing", "Positive attitude", "Basic understanding"],
+        improvements: ["Dive deeper into specific tech tools", "Avoid short answers", "Provide real examples"],
+        analysis: "Simulated report due to a generation error. The candidate displayed average proficiency."
+      }
+    });
   }
 });
 
@@ -350,56 +422,85 @@ const FALLBACK_QUESTIONS = {
   ]
 };
 
-async function generateNextQuestion(skills, interviewType, previousQuestions, userResponse) {
-  // Enhanced follow-up question generation
-  if (userResponse && userResponse.length > 0) {
-    // Generate contextual follow-up based on user response
-    return generateFollowUpQuestion(previousQuestions[previousQuestions.length - 1], userResponse);
-  }
+async function generateNextQuestion(skills, interviewType, previousQuestions, userResponse, previousPerformance = null) {
+  const isFollowUp = userResponse && userResponse.trim().length > 0 && previousQuestions.length > 0;
+  
+  const context = {
+    resumeText: "", 
+    interviewType,
+    domain: skills.slice(0, 5).join(', '),
+    previousPerformance,
+    previousQuestions,
+    lastAnswer: userResponse,
+    isFollowUp
+  };
 
-  // Generate next question from the skill-based pool
-  // FIX: Added empty string for resumeText argument to match signature
-  const availableQuestions = await generateQuestions("", skills, interviewType, 20, previousQuestions);
-
-  // Filter out previously asked questions
-  const remainingQuestions = availableQuestions.filter(q =>
-    !previousQuestions.includes(q)
-  );
-
-  if (remainingQuestions.length > 0) {
-    return remainingQuestions[0];
-  }
+  // Directly ask the model to generate the next question matching exactly the category rules!
+  const q = await generateQuestion(context);
+  if (q) return q;
 
   // Fallback to follow-up questions
   const followUpQuestions = [
-    "What are your thoughts on this approach?",
-    "Can you elaborate on that?",
-    "How would you handle edge cases in this scenario?",
-    "What would you do differently if you had to do this again?",
-    "How does this relate to your overall experience?",
-    "Can you walk me through your thought process?",
-    "What specific challenges did you face?",
-    "How did you validate your solution?"
+    "Could you elaborate on how your skills apply to this scenario?",
+    "Can you walk me through your thought process for that?",
+    "What specific challenges did you face previously?"
   ];
 
   return followUpQuestions[Math.floor(Math.random() * followUpQuestions.length)];
 }
 
-async function processAudioResponse(audioData, question, interviewType) {
-  // This would process the audio and generate feedback
-  // For now, we'll return a simulated response
-  return {
-    transcription: "This is a simulated transcription of the user's response.",
-    feedback: {
-      summary: "Clear structure and relevant examples.",
-      score: Math.floor(Math.random() * 40) + 60,
-      suggestions: [
-        "Be more specific with metrics (e.g., performance gains)",
-        "Highlight your role and impact",
-        "Add edge cases you considered"
-      ]
+async function processTextResponse(userText, question, interviewType) {
+  if (!userText || userText.trim().length === 0) {
+    return {
+      transcription: "",
+      feedback: {
+        summary: "No spoken response detected.",
+        score: 0,
+        suggestions: ["Please make sure your microphone is working and you speak clearly."]
+      }
+    };
+  }
+
+  try {
+    const prompt = `You are an AI interviewer evaluating a candidate's text response.
+The question asked was: "${question}".
+The candidate's response is: "${userText}".
+The interview type is: ${interviewType}.
+
+Please evaluate the candidate's response, and provide detailed feedback in JSON format exactly matching this structure:
+{
+  "transcription": "The exact valid text of what the candidate said (formatted nicely and spell-checked)",
+  "feedback": {
+    "summary": "1-2 sentences summarizing their answer and its quality",
+    "score": (a number between 0 and 100),
+    "suggestions": ["Suggestion 1", "Suggestion 2", "Suggestion 3"]
+  }
+}
+Return ONLY valid JSON.`;
+
+    const response = await genai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt
+    });
+
+    const parsed = extractJSON(response.text);
+    if (parsed) {
+      return parsed;
     }
-  };
+    
+    throw new Error("Invalid output format from model");
+
+  } catch (err) {
+    console.error("Error processing response in processTextResponse:", err);
+    return {
+      transcription: userText,
+      feedback: {
+        summary: "Response could not be properly evaluated.",
+        score: 50,
+        suggestions: ["Try providing more detailed answers."]
+      }
+    };
+  }
 }
 
 // Start server

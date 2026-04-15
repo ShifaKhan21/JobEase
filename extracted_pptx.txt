@@ -1,0 +1,189 @@
+
+--- Slide 1 ---
+Interdisciplinary Insights and Practices for Sustainable Growth
+(I3PSG 2026)
+Organized by
+Shivajirao S. Jondhale College of Engineering, Dombivli(East)
+2 nd April, 2026
+
+PrepSmartly: Multimodal AI-Powered Interview Simulation System with Real-Time Feedback and Adaptive LLM Evaluation
+
+Anmol Mahanty
+ Rohan Katakdhond
+ Mohammad Mulla
+Prof. Deveshree Wankede
+
+Affiliation of Presenting Author : Shivajirao S. Jondhale College of Engineering ,Dombivli (E)
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+
+
+--- Slide 2 ---
+
+Abstract					……………………..3
+Introduction				……………………..4
+Literature Review			……………………..5
+Research Gaps			……………………..6
+Proposed Methodology	……………………..7
+Results & Discussion		……………………..8
+Comparative Analysis	……………………..9
+Conclusion & Future Work  …………………..10
+References				……………………..11
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+INDEX
+
+--- Slide 3 ---
+
+
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+Modern interviews evaluate technical knowledge, communication, confidence, and behavior.
+Traditional tools rely on static questions with generic and delayed feedback, lacking real-time adaptability.
+They fail to simulate dynamic, real-world interview conditions, reducing preparation effectiveness.
+PrepSmartly is an AI-based multimodal interview simulation platform designed to overcome these limitations.
+It integrates speech analysis, facial recognition, and live coding evaluation for realistic assessment.
+A Dual-LLM architecture enables adaptive questioning and real-time evaluation.
+Provides real-time micro-feedback and detailed post-interview analysis covering technical, communication, and non-verbal aspects.
+
+ABSTRACT
+
+--- Slide 4 ---
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+INTRODUCTION
+Interviews are a critical step for jobs, higher education, and career advancement.
+They assess both technical knowledge and communication skills.
+Many candidates underperform due to nervousness, lack of confidence, and poor response structuring.
+Existing platforms rely on static Q&A formats and fail to simulate real interview scenarios.
+They ignore speech tone, facial expressions, and live coding abilities, leading to incomplete evaluation.
+PrepSmartly addresses these gaps by providing a realistic, adaptive, AI-driven interview simulation environment.
+
+
+
+--- Slide 5 ---
+ 
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+LITERATURE REVIEW 
+Table No :1 Summary of Literature Review
+
+--- Slide 6 ---
+ 
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+LITERATURE REVIEW 
+Table No :1 Summary of Literature Review
+
+--- Slide 7 ---
+ 
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+LITERATURE REVIEW 
+Table No :1 Summary of Literature Review
+
+--- Slide 8 ---
+
+
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+Lack of integrated multimodal systems (voice + facial + NLP + coding not combined)
+No real-time adaptive feedback during interviews
+Generic question generation, poor personalization using resume/context
+Incomplete emotion & behavioral analysis 
+Dependence on static datasets 
+Absence of realistic interview simulation (no human-like interaction)
+Weak fallback mechanisms (fails in mic-off / unexpected scenarios) 
+RESEARCH GAPS
+
+--- Slide 9 ---
+ 
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+23-03-2026
+PROPOSED METHODOLOGY
+
+Fig 1: Architecture of PrepSmartly
+
+--- Slide 10 ---
+
+RESULTS AND DISCUSSION
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+Fig 2: Live Interview
+
+--- Slide 11 ---
+
+RESULTS AND DISCUSSION
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+Fig 3: Live Coding
+
+--- Slide 12 ---
+
+COMPARATIVE ANALYSIS
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+Table 2 - Confusion Matrix Analysis of Behavioral Expression Classification
+ Fig.4 Facial Expression Model Performance Metrics
+
+--- Slide 13 ---
+
+CONCLUSION AND FUTURE WORK
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+PrepSmartly overcomes the limitations of traditional interview preparation by providing a realistic and adaptive AI-driven simulation system. It combines real-time feedback, dual LLM evaluation, and multimodal analysis using technologies like MediaPipe and Deepgram to assess candidates across technical, communication, and behavioral aspects, while ensuring data privacy through a secure architecture.
+In the future, the system can be enhanced with more advanced AI models for better question generation and evaluation, along with improved multimodal analysis such as posture and gesture tracking. It can also include personalized learning recommendations, multilingual support, job portal integration, and immersive technologies like Virtual Reality to create a more effective and realistic interview experience.
+
+
+--- Slide 14 ---
+
+REFERENCES
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+[1] R. Shirbhate, H. Kulkarni, N. Bidaye, and S. Kangude, AI-Based Mock Interview Simulation System for Job Preparation, International Research Journal, 2025, pp. 858–863.
+[2] B. D. Simon, B. Ozyoruk, D. G. Gelikman, S. A. Harmon,    and B. Türkbey, The Future of Multimodal Artificial Intelligence Models for Integrating Imaging and Clinical Metadata: A Narrative Review, Journal of Multimodal AI Research, 2025, pp. 303–312.
+[3] D. Anwat, P. Derle, P. Nagare, and H. R. Agashe, Facial  Expression and Sound Analysis for Interview Assessment: An AI-Based Application, International Journal Publication, 1st Edition, 2024, pp. 269–278.
+[4] T. Kopalidis, V. Solachidis, N. Vretos, and P. Daras, Advances in Facial Expression Recognition: A Survey of Methods, Benchmarks, Models, and Datasets, IEEE Transactions on Affective Computing, 2024, pp. 1–61.
+[5]  K. K. Jain, R. S. R., G. R. S. Charan, and V. A. Narayana, AI Interviewer Chatbot for Technical and HR Brilliance: A Tool for Upskilling Candidate, International Journal of Engineering Research & Technology (IJERT), 2024.
+[6] S. Mahajan, N. Sonawane, R. Bagal, S. Kulkarni, A. Suryawanshi, and Y. Mhaisne, Generative AI-Based Interview Simulation and Performance Analysis, International Research Journal of Modernization in Engineering Technology and Science, 2024, pp. 2623–2629.
+
+
+
+
+--- Slide 15 ---
+
+REFERENCES
+
+Interdisciplinary Insights and Practices for Sustainable Growth (I3PSG 2026)
+‹#›
+02-04-2026
+[7] O. S. Ekundayo and S. Viriri, Facial Expression Recognition: A Review of Trends and Techniques, IEEE Journal, 2023, pp. 44–73.
+[8] H. R. Agashe, D. Anwat, P. Derle, P. Nagare, and S. Dhavale, AI-Based Mock Interview Evaluator and Analysis: To Analyse Emotion, Confidence, and Knowledge, International Journal of Advanced Research in Science, Communication and Technology (IJARSCT), 2023, pp. 273–276.
+[9] A. Girkar, M. Khambayat, A. Waghmare, and S. Chaudhary, Subjective Answer Evaluation using Natural Language Processing and Machine Learning, International Research Journal of Engineering and Technology (IRJET), 2021, pp. 5040–5043.
+[10] S. Furui, T. Kikuchi, Y. Shinnaka, and C. Hori, Speech-to-Text and Speech-to-Speech Summarization of Spontaneous Speech, IEEE Transactions on Speech and Audio Processing, 2020, pp. 401–408.
+[11] H. Ahlawat, N. Aggarwal, and D. Gupta, Automatic Speech Recognition: A Survey of Deep Learning Techniques and Approaches, International Journal of Cognitive Computing in Engineering, vol. 6, 2025, pp. 201–237.
+[12] R. Sapkota, S. Raza, M. Shoman, A. Paudel, and M. Karkee, Multimodal Large Language Models for Image, Text, and Speech Data Augmentation: A Survey, ACM Computing Surveys, 2025, pp. 1–52.
+
+
+
+
