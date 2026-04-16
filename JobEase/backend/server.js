@@ -8,7 +8,7 @@ const pdf = require('pdf-parse');
 const { GoogleGenAI } = require('@google/genai');
 
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const GEMINI_MODEL = 'gemini-3-flash-preview';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 async function callGemini(prompt) {
   try {
@@ -126,6 +126,9 @@ Generate exactly ONE interview question. Return ONLY a valid JSON object. Do not
     return rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
   } catch (error) {
     console.error("Error in generateQuestion:", error);
+    if (error?.status === 429 || error?.response?.status === 429 || error?.toString().includes('429')) {
+      return "Whoops! We're hitting the free-tier API rate limits. Please wait about 30 seconds before submitting your next response or trying again!";
+    }
     return "Could you describe your technical background?";
   }
 }
@@ -238,7 +241,7 @@ app.post('/api/start-interview', async (req, res) => {
     const { resumeText, skills, interviewType, previousPerformance } = req.body;
     let questions = [];
     try {
-      questions = await generateQuestions(resumeText, skills, interviewType, 5, [], previousPerformance);
+      questions = await generateQuestions(resumeText, skills, interviewType, 1, [], previousPerformance);
     } catch (e) {
        console.error('Model generation failed, falling back:', e);
        const pool = FALLBACK_QUESTIONS[interviewType] || FALLBACK_QUESTIONS.technical;
@@ -278,12 +281,13 @@ app.post('/api/generate-question', async (req, res) => {
   }
 });
 
-// Process text response endpoint (formerly audio)
-app.post('/api/process-audio', async (req, res) => {
+// Process audio and text response endpoint
+app.post('/api/process-audio', upload.single('audio'), async (req, res) => {
   try {
     const { userText, question, interviewType } = req.body;
+    const audioFile = req.file;
 
-    const feedback = await processTextResponse(userText, question, interviewType);
+    const feedback = await processTextResponse(userText, question, interviewType, audioFile);
 
     res.json({
       success: true,
@@ -449,8 +453,8 @@ async function generateNextQuestion(skills, interviewType, previousQuestions, us
   return followUpQuestions[Math.floor(Math.random() * followUpQuestions.length)];
 }
 
-async function processTextResponse(userText, question, interviewType) {
-  if (!userText || userText.trim().length === 0) {
+async function processTextResponse(userText, question, interviewType, audioFile = null) {
+  if ((!userText || userText.trim().length === 0) && !audioFile) {
     return {
       transcription: "",
       feedback: {
@@ -462,14 +466,15 @@ async function processTextResponse(userText, question, interviewType) {
   }
 
   try {
-    const prompt = `You are an AI interviewer evaluating a candidate's text response.
+    const isAudio = !!audioFile;
+    const basePrompt = `You are an AI interviewer evaluating a candidate's ${isAudio ? 'audio spoken' : 'text'} response.
 The question asked was: "${question}".
-The candidate's response is: "${userText}".
+${!isAudio ? `The candidate's text response is: "${userText}".` : 'Listen to the provided audio to analyze the candidate\'s response.'}
 The interview type is: ${interviewType}.
 
 Please evaluate the candidate's response, and provide detailed feedback in JSON format exactly matching this structure:
 {
-  "transcription": "The exact valid text of what the candidate said (formatted nicely and spell-checked)",
+  "transcription": "The exact valid text of what the candidate said (formatted nicely and spell-checked). If they murmured or spoke nothing, transcribe what you heard minimally.",
   "feedback": {
     "summary": "1-2 sentences summarizing their answer and its quality",
     "score": (a number between 0 and 100),
@@ -478,9 +483,23 @@ Please evaluate the candidate's response, and provide detailed feedback in JSON 
 }
 Return ONLY valid JSON.`;
 
+    let generatedContents = [basePrompt];
+
+    if (isAudio) {
+      const audioBuffer = fs.readFileSync(audioFile.path);
+      generatedContents.unshift({
+        inlineData: {
+          data: audioBuffer.toString("base64"),
+          mimeType: audioFile.mimetype || "audio/webm"
+        }
+      });
+      // Cleanup the uploaded file immediately to save disk cache
+      try { fs.unlinkSync(audioFile.path); } catch (e) { }
+    }
+
     const response = await genai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: prompt
+      contents: generatedContents
     });
 
     const parsed = extractJSON(response.text);
@@ -495,9 +514,9 @@ Return ONLY valid JSON.`;
     return {
       transcription: userText,
       feedback: {
-        summary: "Response could not be properly evaluated.",
-        score: 50,
-        suggestions: ["Try providing more detailed answers."]
+        summary: err?.status === 429 ? "Whoops! Free-tier API rate limit exceeded. Please wait ~30 seconds!" : "Response could not be properly evaluated.",
+        score: null,
+        suggestions: ["Try submitting this answer again after pausing for a few seconds if you hit rate limits!"]
       }
     };
   }
@@ -508,3 +527,9 @@ app.listen(PORT, () => {
   console.log(`🚀 JobEase server is running on port ${PORT}`);
   console.log(`📱 Frontend should connect to: http://localhost:${PORT}`);
 });
+
+// Trigger nodemon restart
+
+// Nodemon reload trigger
+
+// Trigger nodemon

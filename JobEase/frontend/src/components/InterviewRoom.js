@@ -52,6 +52,8 @@ const InterviewRoom = () => {
 
   const timerRef = useRef(null);
   const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const interviewHistoryRef = useRef([]);
 
   useEffect(() => {
@@ -89,13 +91,26 @@ const InterviewRoom = () => {
 
       recognitionRef.current.onend = () => {
         // Automatically restart speech recognition if it stops while recording is active
-        // This is a known workaround for Web Speech API silently halting
         const micBtn = document.querySelector('.mic-button');
         if (micBtn && micBtn.classList.contains('recording')) {
            try { recognitionRef.current.start(); } catch(e){}
         }
       };
     }
+
+    // Initialize MediaRecorder
+    const initMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunksRef.current.push(event.data);
+        };
+      } catch (err) {
+        console.error('Mic access denied or unavailable:', err);
+      }
+    };
+    initMedia();
   }, []);
 
   const handleResumeUpload = (event) => {
@@ -250,45 +265,77 @@ const InterviewRoom = () => {
     }
   };
 
-  // Removed MediaRecorder functions, using purely SpeechRecognition
-
-  const startSpeechRecognition = () => {
-    if (recognitionRef.current) recognitionRef.current.start();
+  // MediaRecorder functions combined with SpeechRecognition fallback
+  const startRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "inactive") {
+      audioChunksRef.current = [];
+      mediaRecorderRef.current.start();
+    }
+    if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch(e) {}
+    }
+    setIsRecording(true);
   };
 
-  const stopSpeechRecognition = () => {
-    if (recognitionRef.current) recognitionRef.current.stop();
+  const stopRecordingAndGetBlob = () => {
+    return new Promise(resolve => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.onstop = () => {
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          resolve(blob);
+        };
+        mediaRecorderRef.current.stop();
+      } else {
+        resolve(null);
+      }
+      setIsRecording(false);
+    });
   };
 
   const nextQuestion = async () => {
     try {
+      let audioBlob = null;
+      if (isRecording) {
+        audioBlob = await stopRecordingAndGetBlob();
+      }
+
       let finalUser = userResponse || interimUserText;
       setInterimUserText('');
       setUserResponse('');
 
       // Render a temporary message immediately if local speech recognition failed
-      if (!finalUser) {
+      if (!finalUser && !audioBlob) {
+        setInterviewHistory(prev => [...prev, { type: 'user', content: '(No input detected)' }]);
+      } else if (!finalUser && audioBlob) {
         setInterviewHistory(prev => [...prev, { type: 'user', content: '(Processing audio...)' }]);
       } else {
         setInterviewHistory(prev => [...prev, { type: 'user', content: finalUser }]);
       }
 
+      const formData = new FormData();
+      formData.append('userText', finalUser);
+      formData.append('question', currentQuestion);
+      formData.append('interviewType', type);
+      if (audioBlob) {
+        formData.append('audio', audioBlob, 'audio.webm');
+      }
+
       const feedbackResp = await fetch('/api/process-audio', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userText: finalUser,
-          question: currentQuestion,
-          interviewType: type
-        })
+        // Do not set Content-Type so browser sets multipart boundary automatically
+        body: formData
       }).catch(() => null);
 
       if (feedbackResp && feedbackResp.ok) {
         const feedbackData = await feedbackResp.json();
-        
+        const apiPayload = feedbackData.feedback || {}; // e.g., { transcription, feedback: { summary, score, suggestions } }
+        const actualFeedback = apiPayload.feedback || {}; 
+
         // Update empty user response with backend transcription if available
-        if (!finalUser && feedbackData.transcription) {
-           finalUser = feedbackData.transcription;
+        if (!finalUser) {
+           finalUser = apiPayload.transcription || '(No input detected)';
            setInterviewHistory(prev => {
              const newHistory = [...prev];
              // Find the last user message and replace it
@@ -302,12 +349,12 @@ const InterviewRoom = () => {
            });
         }
 
-        if (feedbackData?.feedback) {
+        if (actualFeedback) {
           let feedbackText = '';
-          if (typeof feedbackData.feedback === 'string') {
-            feedbackText = feedbackData.feedback;
-          } else if (typeof feedbackData.feedback === 'object') {
-            const { summary, score, suggestions } = feedbackData.feedback;
+          if (typeof actualFeedback === 'string') {
+            feedbackText = actualFeedback;
+          } else {
+            const { summary, score, suggestions } = actualFeedback;
             feedbackText = [
               summary ? `Feedback: ${summary}` : null,
               Number.isFinite(score) ? `Score: ${score}/100` : null,
@@ -501,7 +548,7 @@ const InterviewRoom = () => {
                 <div className="bg-vintage-cream w-24 h-24 rounded-full flex items-center justify-center text-5xl shadow-inner borderborder-vintage-gray mb-8">
                   🤖
                 </div>
-                <div className="text-3xl lg:text-4xl font-serif text-center text-vintage-navy italic leading-snug px-6">
+                <div className="text-xl lg:text-xl font-serif font-bold text-justify text-vintage-navy italic leading-snug px-6">
                   "{currentQuestion}"
                 </div>
               </div>
@@ -510,12 +557,9 @@ const InterviewRoom = () => {
                 <button
                   onClick={async () => {
                     if (isRecording) {
-                      stopSpeechRecognition();
-                      setIsRecording(false);
-                      nextQuestion();
+                      await nextQuestion();
                     } else {
-                      setIsRecording(true);
-                      startSpeechRecognition();
+                      startRecording();
                     }
                   }}
                   className={`w-20 h-20 rounded-full flex items-center justify-center text-3xl transition-all shadow-lg border-4 ${isRecording ? 'bg-red-500 text-white border-red-200 animate-pulse hover:bg-red-600' : 'bg-vintage-navy text-white border-vintage-cream hover:bg-vintage-dark hover:scale-105'}`}
@@ -539,7 +583,7 @@ const InterviewRoom = () => {
                       ⏸ Pause Mic
                     </button>
                     <button 
-                      onClick={() => { setIsRecording(false); stopSpeechRecognition(); nextQuestion(); }} 
+                      onClick={nextQuestion} 
                       className={`px-4 py-2 text-white font-bold rounded-sm transition-colors flex-1 ${!userResponse && !interimUserText && !isRecording ? 'bg-vintage-gray cursor-not-allowed' : 'bg-vintage-accent hover:bg-vintage-gold'}`}
                       disabled={!userResponse && !interimUserText && !isRecording}
                     >
